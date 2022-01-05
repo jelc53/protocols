@@ -1,3 +1,3 @@
-Repository for programming exercises from cs255 intro to cryptography with
+Repository for programming exercises from CS255 Intro to Cryptography with
 Dan Boneh.
 
