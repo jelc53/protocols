@@ -6,6 +6,9 @@ import os
 def strxor(a, b):     # xor two strings (trims the longer input)
     return "".join([chr(ord(x) ^ ord(y)) for (x, y) in zip(a, b)])
 
+def hexxor(a, b):
+    return hex(int(a, 16) ^ int(b, 16))
+    
 def random(size=16):
     return open("/dev/urandom").read(size)
 
@@ -31,6 +34,7 @@ def main():
     for i0, c0 in enumerate(ciphers):
         # c0_ascii = bytearray.fromhex(c0).decode("latin1")
         counter = collections.Counter()
+        print(len(c0))
 
         # for each other ciphertext
         for i1, c1 in enumerate(ciphers):
