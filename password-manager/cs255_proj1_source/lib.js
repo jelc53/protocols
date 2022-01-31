@@ -1,27 +1,27 @@
 "use strict";
 
-const { getRandomValues } = require('crypto');
+const { getRandomValues } = require('crypto');  // add .webcrypto
 
 let encoder = new TextEncoder();
 let decoder = new TextDecoder();
 
-let stringToByteArray = function(str) {
+let stringToByteArray = function (str) {
   return encoder.encode(str)
 }
 
-let byteArrayToString = function(arr) {
+let byteArrayToString = function (arr) {
   return decoder.decode(arr);
 }
 
-let genRandomSalt = function(len=16) {
+let genRandomSalt = function (len = 16) {
   return byteArrayToString(getRandomValues(new Uint8Array(len)));
 }
 
-let untypedToTypedArray = function(arr) {
+let untypedToTypedArray = function (arr) {
   return new Uint8Array(arr);
 }
 
-let bufferToUntypedArray = function(arr) {
+let bufferToUntypedArray = function (arr) {
   return Array.from(new Uint8Array(arr));
 }
 

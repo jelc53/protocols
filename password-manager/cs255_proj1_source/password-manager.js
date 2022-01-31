@@ -15,23 +15,25 @@ class Keychain {
    *  You may design the constructor with any parameters you would like. 
    * Return Type: void
    */
-  constructor() {
+  constructor(kvStore, initSalts, aesKey, hmacKey) {
     this.data = {
       /* Store member variables that you intend to be public here
          (i.e. information that will not compromise security if an adversary sees) */
-      kvs: {},
-      salt: 0,
+      initSalts_: initSalts,
+      kvStore_: kvStore,
     };
     this.secrets = {
       /* Store member variables that you intend to be private here
          (information that an adversary should NOT see). */
+      aesKey_: aesKey,
+      hmacKey_: hmacKey,
     };
 
     this.data.version = "CS 255 Password Manager v1.0";
     // Flag to indicate whether password manager is "ready" or not
     this.ready = true;
 
-    throw "Not Implemented!";
+    // throw "Not Implemented!";
   };
 
   /** 
@@ -40,10 +42,54 @@ class Keychain {
     *
     * Arguments:
     *   password: string
-    * Return Type: void
+    * Return Type: KeyChain
     */
   static async init(password) {
-    throw "Not Implemented!";
+
+    // Convert password String to ArrayBuffer
+    let rawKey = await subtle.importKey(
+      "raw",
+      password,
+      { name: "PBKDF2" },
+      false,
+      ["deriveKey"]
+    );
+
+    // Derive master key from rawKey
+    let iterations = Keychain.PBKDF2_ITERATIONS;
+    let masterSalt = genRandomSalt();  // only need 64-bits
+    let masterKey = await subtle.deriveKey(
+      {
+        "name": "PBKDF2",
+        salt: masterSalt,
+        "iterations": iterations,
+        "hash": "SHA-256"
+      },
+      rawKey,
+      {
+        "name": "AES-GCM",
+        "length": 256,
+      },
+      false,
+      ["encrypt", "decrypt"]
+    );
+
+    // Generate AES-GCM key (k1) and HMAC key (k2) 
+    // let aesSalt = genRandomSalt(8);  // only need 64-bits
+    let aesKey = await subtle.sign({ "name": "HMAC" }, masterKey, masterSalt);
+
+    // let hmacSalt = genRandomSalt(8);  // only need 64-bits
+    let hmacKey = await subtle.sign({ "name": "HMAC" }, masterKey, masterSalt);
+
+    // Execute constructor to produce KeyChain object
+    // throw "Not Implemented!";
+    let initKeychain = new Keychain(
+      {},
+      [masterSalt, aesSalt, hmacSalt],
+      aesKey,
+      hmacKey
+    );
+    return initKeychain;
   }
 
   /**
@@ -64,7 +110,21 @@ class Keychain {
     * Return Type: Keychain
     */
   static async load(password, repr, trustedDataCheck) {
+
+    // Access keychain data variables from repr
+    // let state = await JSON.parse(repr[0]);
+
+    // Check provided password is valid for keychain
+    // ...
+
+    // Validate checksum to handle rollback attack
+    // if (trustedDataCheck == repr[1]) {
+    //   throw "KVS checksum violated, potential rollback attack!";
+    // }
+
+    // Return KeyChain object with data from repr
     throw "Not Implemented!";
+    // return Keychain();
   };
 
   /**
@@ -81,6 +141,18 @@ class Keychain {
     * Return Type: array
     */
   async dump() {
+
+    // Return null if keychain not ready
+    // ...
+
+    // Create JSON encoded serialization of keychain
+    // let jsonEncodedKeychain = JSON.stringify(this.data);
+
+    // Create SHA-256 hash of keychain
+    // let keychainHash = await subtle.digest("SHA-256", this.data);
+
+    // Return array of JSON encoded keychain and SHA-256 checksum
+    // return [jsonEncodedKeychain, keychainHash];
     throw "Not Implemented!";
   };
 
@@ -95,6 +167,10 @@ class Keychain {
     * Return Type: Promise<string>
     */
   async get(name) {
+
+    // Check if keychain has not been initialized
+    // throw "Keychain not initialized.";
+
     throw "Not Implemented!";
   };
 
@@ -110,6 +186,10 @@ class Keychain {
   * Return Type: void
   */
   async set(name, value) {
+
+    // Check if keychain has not been initialized
+    // throw "Keychain not initialized.";
+
     throw "Not Implemented!";
   };
 
@@ -123,6 +203,10 @@ class Keychain {
     * Return Type: Promise<boolean>
   */
   async remove(name) {
+
+    // Check if keychain has not been initialized
+    // throw "Keychain not initialized.";
+
     throw "Not Implemented!";
   };
 
