@@ -15,11 +15,10 @@ class Keychain {
    *  You may design the constructor with any parameters you would like. 
    * Return Type: void
    */
-  constructor(kvStore, initSalts, aesKey, hmacKey) {
+  constructor(kvStore, aesKey, hmacKey) {
     this.data = {
       /* Store member variables that you intend to be public here
          (i.e. information that will not compromise security if an adversary sees) */
-      initSalts_: initSalts,
       kvStore_: kvStore,
     };
     this.secrets = {
@@ -57,35 +56,61 @@ class Keychain {
 
     // Derive master key from rawKey
     let iterations = Keychain.PBKDF2_ITERATIONS;
-    let masterSalt = genRandomSalt();  // only need 64-bits
+    let salt = genRandomSalt();  // only need 64-bits
     let masterKey = await subtle.deriveKey(
       {
-        "name": "PBKDF2",
-        salt: masterSalt,
+        "name": "PBKDF2", salt: salt,
         "iterations": iterations,
         "hash": "SHA-256"
       },
       rawKey,
       {
-        "name": "AES-GCM",
-        "length": 256,
+        name: "HMAC",
+        hash: "SHA-256",
+        length: 128,
       },
       false,
-      ["encrypt", "decrypt"]
+      ["sign"]
     );
 
     // Generate AES-GCM key (k1) and HMAC key (k2) 
-    // let aesSalt = genRandomSalt(8);  // only need 64-bits
-    let aesKey = await subtle.sign({ "name": "HMAC" }, masterKey, masterSalt);
+    let aesSalt = genRandomSalt();  // only need 64-bits
+    let aesSigned = await subtle.sign(
+      { "name": "HMAC" },
+      masterKey,
+      aesSalt
+    );
 
-    // let hmacSalt = genRandomSalt(8);  // only need 64-bits
-    let hmacKey = await subtle.sign({ "name": "HMAC" }, masterKey, masterSalt);
+    let aesKey = await subtle.importKey(
+      "raw",
+      aesSigned,
+      { name: "AES-GCM" },
+      false,  // only relevnt if export
+      ["encrypt", "decrypt"]
+    );
+
+    let hmacSalt = genRandomSalt();  // only need 64-bits
+    let hmacSigned = await subtle.sign(
+      { "name": "HMAC" },
+      masterKey,
+      hmacSalt
+    );
+
+    let hmacKey = await subtle.importKey(
+      "raw",
+      hmacSigned,
+      {
+        name: "HMAC",
+        hash: "SHA-256"
+      },
+      false,  // only relevnt if export
+      ["sign"]
+    );
 
     // Execute constructor to produce KeyChain object
     // throw "Not Implemented!";
     let initKeychain = new Keychain(
       {},
-      [masterSalt, aesSalt, hmacSalt],
       aesKey,
       hmacKey
     );
@@ -111,20 +136,25 @@ class Keychain {
     */
   static async load(password, repr, trustedDataCheck) {
 
+    // Validate checksum to handle rollback attack
+    let keychainHash = await subtle.digest("SHA-256", repr);
+    if (keychainHash == trustedDataCheck) {
+      throw Error("KVS checksum violated, potential rollback attack!");
+    }
+
     // Access keychain data variables from repr
-    // let state = await JSON.parse(repr[0]);
+    let state = await JSON.parse(repr);
 
     // Check provided password is valid for keychain
-    // ...
+    // ... 
 
-    // Validate checksum to handle rollback attack
-    // if (trustedDataCheck == repr[1]) {
-    //   throw "KVS checksum violated, potential rollback attack!";
-    // }
+    // Initialize keychain and update state
+    let loadedKeychain = await Keychain.init(password);
+    loadedKeychain.this.data.kvStore_ = state;
 
     // Return KeyChain object with data from repr
-    throw "Not Implemented!";
-    // return Keychain();
+    return loadedKeychain;
+    // throw "Not Implemented!";
   };
 
   /**
@@ -143,17 +173,19 @@ class Keychain {
   async dump() {
 
     // Return null if keychain not ready
-    // ...
+    if (this.ready == false) {
+      return null;
+    }
 
     // Create JSON encoded serialization of keychain
-    // let jsonEncodedKeychain = JSON.stringify(this.data);
+    let jsonEncodedKeychain = JSON.stringify(this.data);
 
     // Create SHA-256 hash of keychain
-    // let keychainHash = await subtle.digest("SHA-256", this.data);
+    let keychainHash = await subtle.digest("SHA-256", untypedToTypedArray(this.data));
 
     // Return array of JSON encoded keychain and SHA-256 checksum
-    // return [jsonEncodedKeychain, keychainHash];
-    throw "Not Implemented!";
+    return [jsonEncodedKeychain, keychainHash];
+    // throw "Not Implemented!";
   };
 
   /**
@@ -169,9 +201,51 @@ class Keychain {
   async get(name) {
 
     // Check if keychain has not been initialized
-    // throw "Keychain not initialized.";
+    if (!this.ready) {
+      throw Error("Keychain not initialized.");
+    }
 
-    throw "Not Implemented!";
+    // Hash name using SHA-256 and name arg
+    let nameHash = await subtle.digest("SHA-256", name);
+
+    // Check if nameHash is in kvStore_
+    if (!(nameHash in this.data.kvStore_)) {
+      console.log("Searching for nonexistant pw!");
+      return null;
+    }
+
+    // Fetch encrypted data packet corresponding to hashed name
+    let encryptedDataPacket = this.data.kvStore_[nameHash];
+
+    // Extract elements of encrypted data packet
+    let encryptedData = untypedToTypedArray(encryptedDataPacket[0]);
+    let tagFromPacket = encryptedDataPacket[1];
+    let saltFromPacket = encryptedDataPacket[2];
+
+    // Check integrity of encryptedData (ciphertext)
+    let tag = await subtle.sign(
+      {
+        "name": "HMAC"
+      },
+      this.secrets.hmacKey_,
+      saltFromPacket
+    );
+
+    if (tag != tagFromPacket) {
+      throw Error("HMAC failed, message integrity has been compromised!");
+    }
+
+    // Decrypt data that we have just fetched
+    let decryptedData = await subtle.decrypt(
+      {
+        "name": "AES-GCM",
+        "length": 256,
+      },
+      this.secrets.aesKey_,
+      encryptedData
+    )
+    return byteArrayToString(decryptedData);
+    // throw "Not Implemented!";
   };
 
   /** 
@@ -188,9 +262,38 @@ class Keychain {
   async set(name, value) {
 
     // Check if keychain has not been initialized
-    // throw "Keychain not initialized.";
+    if (!this.ready) {
+      throw Error("Keychain not initialized.");
+    }
 
-    throw "Not Implemented!";
+    // Hash name using SHA-256 and name arg
+    let nameHash = await subtle.digest("SHA-256", name);
+
+    // Generate salt to use for encrypt and hmac
+    let salt = genRandomSalt();
+
+    // Encrypt value using AES-GCM
+    let encryptedData = await subtle.encrypt(
+      {
+        name: "AES-GCM",
+        iv: salt,
+      },
+      this.secrets.aesKey_,
+      value
+    )
+
+    // Sign encrypted data with HMAC
+    let tag = await subtle.sign(
+      {
+        "name": "HMAC"
+      },
+      this.secrets.hmacKey_,
+      salt
+    );
+
+    // Update kvStore_ with encryptedData, tag and salt
+    this.data.kvStore_[nameHash] = [encryptedData, tag, salt];
+    // throw "Not Implemented!";
   };
 
   /**
@@ -205,9 +308,24 @@ class Keychain {
   async remove(name) {
 
     // Check if keychain has not been initialized
-    // throw "Keychain not initialized.";
+    if (!this.ready) {
+      throw Error("Keychain not initialized.");
+    }
 
-    throw "Not Implemented!";
+    // Hash name using SHA-256 and name arg
+    let nameHash = await subtle.digest("SHA-256", name);
+
+    // Fetch encrypted data packet corresponding to hashed name
+    if (nameHash in this.data.kvStore_) {
+      delete this.data.kvStore_[nameHash];
+      console.log("true");
+      return true;
+    }
+
+    // Returns false if name not in keychain
+    console.log("false");
+    return false;
+    // throw "Not Implemented!";
   };
 
   static get PBKDF2_ITERATIONS() { return 100000; }
