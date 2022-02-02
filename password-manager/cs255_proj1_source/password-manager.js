@@ -6,6 +6,10 @@ const { byteArrayToString, genRandomSalt, untypedToTypedArray, bufferToUntypedAr
 const { subtle } = require('crypto').webcrypto;
 
 /********* Implementation ********/
+const hmacPhrase = "HMAC_PHRASE";
+const aesgcmPhrase = "AESGCM_PHRASE";
+const masterPasswordPhrase = "MASTER_PW_PHRASE";
+
 class Keychain {
   /**
    * Initializes the keychain using the provided information. Note that external
@@ -15,17 +19,22 @@ class Keychain {
    *  You may design the constructor with any parameters you would like. 
    * Return Type: void
    */
-  constructor(kvStore, aesKey, hmacKey) {
+  constructor(salt, hmacKey, aesKey, masterPasswordPhraseSigned) {
     this.data = {
       /* Store member variables that you intend to be public here
          (i.e. information that will not compromise security if an adversary sees) */
-      kvStore_: kvStore,
+      kvs: {},
+      salt: salt,
+      hmacPhrase: hmacPhrase,
+      aesgcmPhrase: aesgcmPhrase,
+      masterPasswordPhrase: masterPasswordPhrase,
+      masterPasswordPhraseSigned: masterPasswordPhraseSigned,
     };
     this.secrets = {
       /* Store member variables that you intend to be private here
          (information that an adversary should NOT see). */
-      aesKey_: aesKey,
-      hmacKey_: hmacKey,
+      hmacKey: hmacKey,
+      aesKey: aesKey,
     };
 
     this.data.version = "CS 255 Password Manager v1.0";
@@ -35,15 +44,7 @@ class Keychain {
     // throw "Not Implemented!";
   };
 
-  /** 
-    * Creates an empty keychain with the given password. Once the constructor
-    * has finished, the password manager should be in a ready state.
-    *
-    * Arguments:
-    *   password: string
-    * Return Type: KeyChain
-    */
-  static async init(password) {
+  static async get_master_key(password, salt) {
 
     // Convert password String to ArrayBuffer
     let rawKey = await subtle.importKey(
@@ -55,8 +56,8 @@ class Keychain {
     );
 
     // Derive master key from rawKey
-    let iterations = Keychain.PBKDF2_ITERATIONS;
-    let salt = genRandomSalt();  // only need 64-bits
+    salt = salt || genRandomSalt();
+    let iterations = this.PBKDF2_ITERATIONS;
     let masterKey = await subtle.deriveKey(
       {
         "name": "PBKDF2", salt: salt,
@@ -73,48 +74,95 @@ class Keychain {
       ["sign"]
     );
 
-    // Generate AES-GCM key (k1) and HMAC key (k2) 
-    let aesSalt = genRandomSalt();  // only need 64-bits
-    let aesSigned = await subtle.sign(
-      { "name": "HMAC" },
-      masterKey,
-      aesSalt
-    );
+    return [salt, masterKey];
 
-    let aesKey = await subtle.importKey(
-      "raw",
-      aesSigned,
-      { name: "AES-GCM" },
-      false,  // only relevnt if export
-      ["encrypt", "decrypt"]
-    );
+  }
 
-    let hmacSalt = genRandomSalt();  // only need 64-bits
-    let hmacSigned = await subtle.sign(
-      { "name": "HMAC" },
+  static async get_hmac_and_aes_keys(masterKey) {
+
+    let hmacRawKey = await subtle.sign(
+      "HMAC",
       masterKey,
-      hmacSalt
+      hmacPhrase
     );
 
     let hmacKey = await subtle.importKey(
       "raw",
-      hmacSigned,
+      hmacRawKey,
       {
         name: "HMAC",
-        hash: "SHA-256"
+        hash: "SHA-256",
       },
-      false,  // only relevnt if export
+      false,
       ["sign"]
     );
 
-    // Execute constructor to produce KeyChain object
-    // throw "Not Implemented!";
-    let initKeychain = new Keychain(
-      {},
-      aesKey,
-      hmacKey
+    let aesRawKey = await subtle.sign(
+      "HMAC",
+      masterKey,
+      aesgcmPhrase
     );
-    return initKeychain;
+
+    let aesKey = await subtle.importKey(
+      "raw",
+      aesRawKey,
+      { name: "AES-GCM", },
+      false,
+      ["encrypt", "decrypt"]
+    );
+
+    return [hmacKey, aesKey];
+
+  }
+
+  static async sign_master_password_phrase(masterKey) {
+
+    let masterPasswordPhraseSigned = await subtle.sign(
+      "HMAC",
+      masterKey,
+      masterPasswordPhrase
+    );
+
+    return untypedToTypedArray(masterPasswordPhraseSigned);
+
+  }
+
+  static async dict_to_unit8array(dic) {
+
+    var dicValueArray = Object.keys(dic).map(function (key) {
+      return dic[key];
+    });
+
+    return new Uint8Array(dicValueArray);
+
+  }
+
+  static async check_master_password_phrase(masterKey, masterPasswordPhraseSigned) {
+    let validity = await subtle.verify(
+      "HMAC",
+      masterKey,
+      await this.dict_to_unit8array(masterPasswordPhraseSigned),
+      masterPasswordPhrase
+    );
+
+    return validity;
+
+  }
+
+  /** 
+    * Creates an empty keychain with the given password. Once the constructor
+    * has finished, the password manager should be in a ready state.
+    *
+    * Arguments:
+    *   password: string
+    * Return Type: KeyChain
+    */
+  static async init(password) {
+    let [salt, masterKey] = await this.get_master_key(password);
+    let [hmacKey, aesKey] = await this.get_hmac_and_aes_keys(masterKey);
+    let masterPasswordPhraseSigned = await this.sign_master_password_phrase(masterKey);
+    let pwdMngr = new Keychain(salt, hmacKey, aesKey, masterPasswordPhraseSigned);
+    return pwdMngr;
   }
 
   /**
@@ -137,24 +185,37 @@ class Keychain {
   static async load(password, repr, trustedDataCheck) {
 
     // Validate checksum to handle rollback attack
-    let keychainHash = await subtle.digest("SHA-256", repr);
-    if (keychainHash == trustedDataCheck) {
-      throw Error("KVS checksum violated, potential rollback attack!");
+    if (trustedDataCheck !== undefined) {
+      const keychainHash = await subtle.digest("SHA-256", repr);
+      if (byteArrayToString(keychainHash) !== trustedDataCheck) {
+        throw "Trusted data check failed!";
+      }
     }
 
-    // Access keychain data variables from repr
-    let state = await JSON.parse(repr);
+    // Check whether salt name and value in repr
+    let keychainDataPacket = JSON.parse(repr);
+    if (!("salt" in keychainDataPacket) || (keychainDataPacket["salt"] == undefined)) {
+      throw "Salt not found during load process."
+    }
+
+    // Rebuild keychain masterKey from password
+    let [salt, masterKey] = await this.get_master_key(password, keychainDataPacket["salt"]);
+    let masterPasswordPhraseSigned = keychainDataPacket["masterPasswordPhraseSigned"];
 
     // Check provided password is valid for keychain
-    // ... 
+    if (masterPasswordPhraseSigned == undefined || ! await this.check_master_password_phrase(masterKey, masterPasswordPhraseSigned)) {
+      throw "Password is not valid for keychain!";
+    }
 
-    // Initialize keychain and update state
-    let loadedKeychain = await Keychain.init(password);
-    loadedKeychain.this.data.kvStore_ = state;
+    // Rebuild HMAC and AES keys from masterKey
+    let [hmacKey, aesKey] = await this.get_hmac_and_aes_keys(masterKey);
 
-    // Return KeyChain object with data from repr
-    return loadedKeychain;
-    // throw "Not Implemented!";
+    // Instantiate new password manager (Keychain)
+    this.pwdMngr = new Keychain(salt, hmacKey, aesKey, masterPasswordPhraseSigned);
+    this.pwdMngr.data = keychainDataPacket;
+
+    return this.pwdMngr;
+
   };
 
   /**
@@ -172,21 +233,79 @@ class Keychain {
     */
   async dump() {
 
-    // Return null if keychain not ready
-    if (this.ready == false) {
+    // Check keychain is ready
+    if (!this.ready) {
       return null;
     }
 
     // Create JSON encoded serialization of keychain
-    let jsonEncodedKeychain = JSON.stringify(this.data);
+    const repr = JSON.stringify(this.data);
 
     // Create SHA-256 hash of keychain
-    let keychainHash = await subtle.digest("SHA-256", untypedToTypedArray(this.data));
+    const trustedDataCheck = await subtle.digest("SHA-256", repr);
 
     // Return array of JSON encoded keychain and SHA-256 checksum
-    return [jsonEncodedKeychain, keychainHash];
-    // throw "Not Implemented!";
+    return [repr, byteArrayToString(trustedDataCheck)];
+
   };
+
+  async gen_name_hash(name) {
+
+    // HMAC sign domain name
+    let nameHash = await subtle.sign(
+      "HMAC",
+      this.secrets.hmacKey,
+      name
+    );
+
+    return untypedToTypedArray(nameHash);
+
+  }
+
+  async encrypt_password(password) {
+
+    // Generate salt to use for encrypt and hmac
+    let iv = genRandomSalt(12);
+
+    // Encrypt password using AES-GCM
+    let encryptedPwd = await subtle.encrypt(
+      {
+        name: "AES-GCM",
+        iv: iv,
+      },
+      this.secrets.aesKey,
+      password
+    );
+
+    encryptedPwd = untypedToTypedArray(encryptedPwd);
+
+    return [iv, encryptedPwd];
+
+  }
+
+  async decrypt_password(pwdDataPacket) {
+
+    // Unpack password data
+    let [iv, encryptedPwd] = pwdDataPacket;
+
+    // Type conversion to enable sublte.decrypt()
+    var encryptedPwdArray = Object.keys(encryptedPwd).map(function (key) {
+      return encryptedPwd[key];
+    });
+
+    // Decrypt password using aesKey
+    let password = await subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: iv,
+      },
+      this.secrets.aesKey,
+      new Uint8Array(encryptedPwdArray)
+    );
+
+    return byteArrayToString(password);
+
+  }
 
   /**
     * Fetches the data (as a string) corresponding to the given domain from the KVS.
@@ -200,53 +319,22 @@ class Keychain {
     */
   async get(name) {
 
-    // Check if keychain has not been initialized
+    // Check keychain is ready
     if (!this.ready) {
-      throw Error("Keychain not initialized.");
+      throw "Keychain not initialized.";
     }
 
-    // Hash name using SHA-256 and name arg
-    let nameHash = await subtle.digest("SHA-256", name);
+    // Generate name hash to match kvs storage
+    let nameHash = await this.gen_name_hash(name);
 
-    // Check if nameHash is in kvStore_
-    if (!(nameHash in this.data.kvStore_)) {
-      console.log("Searching for nonexistant pw!");
+    // Check if there exists data packet corresponding to name
+    if (this.data.kvs[nameHash] == undefined) {
       return null;
     }
 
-    // Fetch encrypted data packet corresponding to hashed name
-    let encryptedDataPacket = this.data.kvStore_[nameHash];
+    return this.decrypt_password(this.data.kvs[nameHash]);
 
-    // Extract elements of encrypted data packet
-    let encryptedData = untypedToTypedArray(encryptedDataPacket[0]);
-    let tagFromPacket = encryptedDataPacket[1];
-    let saltFromPacket = encryptedDataPacket[2];
-
-    // Check integrity of encryptedData (ciphertext)
-    let tag = await subtle.sign(
-      {
-        "name": "HMAC"
-      },
-      this.secrets.hmacKey_,
-      saltFromPacket
-    );
-
-    if (tag != tagFromPacket) {
-      throw Error("HMAC failed, message integrity has been compromised!");
-    }
-
-    // Decrypt data that we have just fetched
-    let decryptedData = await subtle.decrypt(
-      {
-        "name": "AES-GCM",
-        "length": 256,
-      },
-      this.secrets.aesKey_,
-      encryptedData
-    )
-    return byteArrayToString(decryptedData);
-    // throw "Not Implemented!";
-  };
+  }
 
   /** 
   * Inserts the domain and associated data into the KVS. If the domain is
@@ -261,40 +349,21 @@ class Keychain {
   */
   async set(name, value) {
 
-    // Check if keychain has not been initialized
+    // Check keychain is ready
     if (!this.ready) {
-      throw Error("Keychain not initialized.");
+      throw "Keychain not initialized.";
     }
 
-    // Hash name using SHA-256 and name arg
-    let nameHash = await subtle.digest("SHA-256", name);
+    // Sign domain name with hmac key
+    let nameHash = await this.gen_name_hash(name);
 
-    // Generate salt to use for encrypt and hmac
-    let salt = genRandomSalt();
+    // Generate encrypted password packet aes key
+    let pwdDataPacket = await this.encrypt_password(value);
 
-    // Encrypt value using AES-GCM
-    let encryptedData = await subtle.encrypt(
-      {
-        name: "AES-GCM",
-        iv: salt,
-      },
-      this.secrets.aesKey_,
-      value
-    )
+    // Update key value store
+    this.data.kvs[nameHash] = pwdDataPacket;
 
-    // Sign encrypted data with HMAC
-    let tag = await subtle.sign(
-      {
-        "name": "HMAC"
-      },
-      this.secrets.hmacKey_,
-      salt
-    );
-
-    // Update kvStore_ with encryptedData, tag and salt
-    this.data.kvStore_[nameHash] = [encryptedData, tag, salt];
-    // throw "Not Implemented!";
-  };
+  }
 
   /**
     * Removes the record with name from the password manager. Returns true
@@ -307,26 +376,25 @@ class Keychain {
   */
   async remove(name) {
 
-    // Check if keychain has not been initialized
+    // Check keychain is ready
     if (!this.ready) {
-      throw Error("Keychain not initialized.");
+      throw "Keychain not initialized.";
     }
 
-    // Hash name using SHA-256 and name arg
-    let nameHash = await subtle.digest("SHA-256", name);
+    // Sign domain name with hmacKey
+    let nameHash = await this.gen_name_hash(name);
 
-    // Fetch encrypted data packet corresponding to hashed name
-    if (nameHash in this.data.kvStore_) {
-      delete this.data.kvStore_[nameHash];
-      console.log("true");
+    // Check if domain name in keychain
+    if (this.data.kvs[nameHash] !== undefined) {
+
+      // Remove element from key-value pair from keychain
+      delete this.data.kvs[nameHash];
       return true;
     }
 
-    // Returns false if name not in keychain
-    console.log("false");
     return false;
-    // throw "Not Implemented!";
-  };
+
+  }
 
   static get PBKDF2_ITERATIONS() { return 100000; }
 };
