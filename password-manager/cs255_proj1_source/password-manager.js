@@ -91,7 +91,7 @@ class Keychain {
       hmacRawKey,
       {
         name: "HMAC",
-        hash: "SHA-256",
+        hash: "SHA-256", q6*
       },
       false,
       ["sign"]
