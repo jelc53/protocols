@@ -1,0 +1,28 @@
+\documentclass[12pt,letterpaper,twoside]{article}
+
+\usepackage{cme212}
+
+\begin{document}
+
+{\centering \textbf{Project 1 Short Answer Questions\\ Silvia Gong, Julian Cooper\\}}
+\vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
+
+\paragraph{Question 1: } Briefly describe your method for preventing the
+adversary from learning information about the lenths of the passwords stored in
+your password manager.
+
+We will want to padd our password strings to ensure they are of equal length
+before encrypted with AES-GCM and stored. The encrypt() and decrypt() methods
+from the subtleCrypto library handle padding (and unpadding) for us.
+
+\paragraph{Question 2: } Briefly describe your method for preventing swap
+attacks. Provide an argument for why the attack is prevented in your scheme.
+
+We defend against swap attacks in our scheme by signing the json dump with our
+`:wq
+
+
+
+
+\end{document}
+

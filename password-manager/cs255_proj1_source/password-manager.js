@@ -307,6 +307,16 @@ class Keychain {
 
   }
 
+  async check_swap_attack(name, pwdHash) {
+    let password = await this.decrypt_password(pwdHash);
+
+    if (!password.startsWith(name)) {
+      throw "Potential swap attack!";
+    }
+
+    return password.substring(name.length);
+  }
+
   /**
     * Fetches the data (as a string) corresponding to the given domain from the KVS.
     * If there is no entry in the KVS that matches the given domain, then return
@@ -332,7 +342,7 @@ class Keychain {
       return null;
     }
 
-    return this.decrypt_password(this.data.kvs[nameHash]);
+    return await this.check_swap_attack(name, this.data.kvs[nameHash]);
 
   }
 
