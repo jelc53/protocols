@@ -57,21 +57,21 @@ class Keychain {
 
     // Derive master key from rawKey
     salt = salt || genRandomSalt();
-    let iterations = this.PBKDF2_ITERATIONS;
     let masterKey = await subtle.deriveKey(
       {
-        "name": "PBKDF2", salt: salt,
-        "iterations": iterations,
+        "name": "PBKDF2",
+        salt: salt,
+        "iterations": this.PBKDF2_ITERATIONS,
         "hash": "SHA-256"
       },
       rawKey,
       {
         name: "HMAC",
-        hash: "SHA-256",
+        hash: { name: "SHA-256" },
         length: 128,
       },
       false,
-      ["sign"]
+      ["sign", "verify"]
     );
 
     return [salt, masterKey];
