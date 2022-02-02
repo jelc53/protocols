@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.20 (TeX Live 2019/Debian) (preloaded format=pdflatex 2021.12.23)  2 FEB 2022 09:52
+This is pdfTeX, Version 3.14159265-2.6-1.40.20 (TeX Live 2019/Debian) (preloaded format=pdflatex 2021.12.23)  2 FEB 2022 13:27
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -485,37 +485,48 @@ Underfull \hbox (badness 10000) in paragraph at lines 5--5
 
  []
 
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 18.
-[1
+LaTeX Font Info:    Trying to load font information for U+msa on input line 56.
+
+(/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
+File: umsa.fd 2013/01/14 v3.01 AMS symbols A
+)
+LaTeX Font Info:    Trying to load font information for U+msb on input line 56.
+
+
+(/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
+File: umsb.fd 2013/01/14 v3.01 AMS symbols B
+) [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 18.
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 113.
+ [2]
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 113.
  (./proj1_answers.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 18.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 18.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 113.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 113.
 Package rerunfilecheck Info: File `proj1_answers.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
-
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
-Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 18.
+Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 113.
  ) 
 Here is how much of TeX's memory you used:
- 9080 strings out of 483183
- 130434 string characters out of 5966291
- 403807 words of memory out of 5000000
- 23942 multiletter control sequences out of 15000+600000
- 533531 words of font info for 28 fonts, out of 8000000 for 9000
+ 9133 strings out of 483183
+ 131151 string characters out of 5966291
+ 407817 words of memory out of 5000000
+ 23969 multiletter control sequences out of 15000+600000
+ 538215 words of font info for 46 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 42i,5n,49p,291b,333s stack positions out of 5000i,500n,10000p,200000b,80000s
-</usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></us
-r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share
-/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb>
-Output written on proj1_answers.pdf (1 page, 36492 bytes).
+ 42i,11n,49p,291b,333s stack positions out of 5000i,500n,10000p,200000b,80000s
+ </home/julian/.texlive2019/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.60
+0pk></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></
+usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb></usr/sh
+are/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share/tex
+live/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/tex
+mf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr/share/texlive/texmf-d
+ist/fonts/type1/public/amsfonts/cm/cmsy10.pfb>
+Output written on proj1_answers.pdf (2 pages, 72291 bytes).
 PDF statistics:
- 26 PDF objects out of 1000 (max. 8388607)
- 19 compressed objects within 1 object stream
- 3 named destinations out of 1000 (max. 500000)
+ 55 PDF objects out of 1000 (max. 8388607)
+ 43 compressed objects within 1 object stream
+ 9 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

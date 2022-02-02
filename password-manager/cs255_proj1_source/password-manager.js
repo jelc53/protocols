@@ -262,7 +262,7 @@ class Keychain {
 
   }
 
-  async encrypt_password(password) {
+  async encrypt_password(name, password) {
 
     // Generate salt to use for encrypt and hmac
     let iv = genRandomSalt(12);
@@ -274,7 +274,7 @@ class Keychain {
         iv: iv,
       },
       this.secrets.aesKey,
-      password
+      name + password  // handle swap attacks
     );
 
     encryptedPwd = untypedToTypedArray(encryptedPwd);
@@ -368,7 +368,7 @@ class Keychain {
     let nameHash = await this.gen_name_hash(name);
 
     // Generate encrypted password packet aes key
-    let pwdDataPacket = await this.encrypt_password(value);
+    let pwdDataPacket = await this.encrypt_password(name, value);
 
     // Update key value store
     this.data.kvs[nameHash] = pwdDataPacket;
