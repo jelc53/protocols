@@ -81,7 +81,18 @@ export default class MessengerClient {
    * Return Type: void
    */
   async receiveCertificate(certificate, signature) {
-    throw ("not implemented!");
+
+
+    // Convert javascript object into string for verification
+    let certMsg = JSON.stringify(certificate);
+
+    // Verify certificate and 
+    if (verifyWithECDSA(this.caPublicKey, certMsg, signature)) {
+      this.certs[certificate.username] = certificate;
+    }
+
+    // Throw exception for potential tampering
+    throw ("Certificate signature cannot be verified");
   }
 
   /** ... */
