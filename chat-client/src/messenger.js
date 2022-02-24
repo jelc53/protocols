@@ -20,6 +20,16 @@ import {
 
 /********* Implementation ********/
 
+/** Stringify certificate for use in verification */
+const stringifyCert = function (cert) {
+  if (typeof cert == "object") {
+    return JSON.stringify(cert);
+  } else if (typeof cert == "string") {
+    return cert;
+  } else {
+    throw "Certificate is not a JSON or string";
+  }
+};
 
 export default class MessengerClient {
   constructor(certAuthorityPublicKey, govPublicKey) {
@@ -49,23 +59,12 @@ export default class MessengerClient {
     // Generate El Gamal key pair
     let keypairObject = await generateEG();
 
-    // Sign pre-cert with CA public key
-    let preCert = {
-      issuer: "Dummy Certificate Auth",
-      expiry: "01/01/2023",
-      username: username,
-      pub: keypairObject.pub
-    };
-    let tag = HMACtoHMACKey(this.caPublicKey, preCert)
-
-
     // Construct certificate
     const certificate = {
-      issuer: "Dummy Certificate Auth",
+      issuer: "Certificate Auth",
       expiry: "01/01/2023",
       username: username,
       pub: keypairObject.pub,
-      sig: tag,
     };
 
     return certificate;
@@ -82,17 +81,17 @@ export default class MessengerClient {
    */
   async receiveCertificate(certificate, signature) {
 
-
-    // Convert javascript object into string for verification
-    let certMsg = JSON.stringify(certificate);
+    // Generate HMAC of certificate
+    let tag = HMACtoHMACKey(this.caPublicKey, stringifyCert(certificate))
 
     // Verify certificate and 
-    if (verifyWithECDSA(this.caPublicKey, certMsg, signature)) {
+    if (verifyWithECDSA(this.caPublicKey, tag, signature)) {
       this.certs[certificate.username] = certificate;
-    }
+    } else {
 
-    // Throw exception for potential tampering
-    throw ("Certificate signature cannot be verified");
+      // Throw exception for potential tampering
+      throw ("Certificate signature cannot be verified");
+    }
   }
 
   /** ... */
