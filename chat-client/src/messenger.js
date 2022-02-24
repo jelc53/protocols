@@ -45,8 +45,29 @@ export default class MessengerClient {
    * Return Type: certificate object/dictionary
    */
   async generateCertificate(username) {
-    throw ("not implemented!");
-    const certificate = {};
+
+    // Generate El Gamal key pair
+    let keypairObject = await generateEG();
+
+    // Sign pre-cert with CA public key
+    let preCert = {
+      issuer: "Dummy Certificate Auth",
+      expiry: "01/01/2023",
+      username: username,
+      pub: keypairObject.pub
+    };
+    let tag = HMACtoHMACKey(this.caPublicKey, preCert)
+
+
+    // Construct certificate
+    const certificate = {
+      issuer: "Dummy Certificate Auth",
+      expiry: "01/01/2023",
+      username: username,
+      pub: keypairObject.pub,
+      sig: tag,
+    };
+
     return certificate;
   }
 
