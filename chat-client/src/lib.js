@@ -100,7 +100,7 @@ export async function HKDF(inputKey, salt, infoStr) {
   // returns an array of two HKDF outputs [HKDF_out1, HKDF_out2]
 
   // since inputKey's derivedKeyAlgorithm is HMAC, we need to sign an arbitrary constant and
-  // then re-import as a a CryptoKey with derivedKeyAlgorithm HKDF
+  // then re-import as a CryptoKey with derivedKeyAlgorithm HKDF
   let inputKey_buff = await subtle.sign({ name: "HMAC" }, inputKey, "0");
   let inputKey_HKDF = await subtle.importKey("raw", inputKey_buff, "HKDF", false, ["deriveKey"]);
 
