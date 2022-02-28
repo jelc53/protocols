@@ -115,7 +115,7 @@ export default class MessengerClient {
     let DHOutput = await computeDH(keypairObject.sec, this.certs[name].pub);
 
     // Ratchet root chain by one step with sharedSecret (rk) as salt
-    let [rootkey, chainkey] = await HKDF(DHOutput, sharedSecret, "ratchet-str");
+    let rootkey, chainkey = await HKDF(DHOutput, sharedSecret, "ratchet-str");
 
     // Add Bob to list of active connections
     this.conns[name] = { 

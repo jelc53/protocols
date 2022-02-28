@@ -1,114 +1,104 @@
 \documentclass[12pt,letterpaper,twoside]{article}
 
 \usepackage{cme212}
+\usepackage{xcolor}
 
 \begin{document}
 
 {\centering \textbf{Project 1 Short Answer Questions\\ Silvia Gong, Julian Cooper\\}}
 \vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
 
-\paragraph{Question 1: } Briefly describe your method for preventing the
-adversary from learning information about the lenths of the passwords stored in
-your password manager.
+\paragraph{Question 1: } In our implementation, Alice and Bob increment their
+Diffie-Hellman ratchets every time they exchange messages. Could the protocol
+be modified to have them increment the DH ratchets once every ten messages 
+without compromising confidentiality against an eavesdropper?
 
-We will want to padd our password strings to ensure they are of equal length
-before encrypted with AES-GCM and stored. The encrypt() and decrypt() methods
-from the subtleCrypto library handle padding (and unpadding) for us.
-
-
-\paragraph{Question 2: } Briefly describe your method for preventing swap
-attacks. Provide an argument for why the attack is prevented in your scheme.
-
-We defend against swap and rollback attacks in our scheme by checking that the
-SHA-256 hash of our json dump has not change between dump and load steps. To do
-this, we need to be able to store the hash of our json dump in a trusted
-location so we have a source of truth to check against.
-
-In addition, we explicitly handle swap attacks by encrypting name || password,
-not just password, when populating out key-value store in set(name, value).
-This then allows us to check whether the first part of the decrypted "value"
-matches name when we call get(name). This second line of defense is important
-because we might not always be guaranteed a trusted storage medium as required
-above.
-
-Why does this work? Imagine our adversary switches the values of "service1"
-and "service2". Then when we call get("service1") to retrieve its password, we
-find that the first part of the decrypted "value" equals "service2". Since this
-does not match "service1", we throw and exception "Potential swap attack!". If
-no swap had occured, we would pass this check and return the decrypted password
-string usual to the caller.
+{\color{purple}Idea: .. }
 
 
-\paragraph{Question 3: } In our proposed defense against rollback attack, we
-assume that we can store the SHA-256 hash in a trusted location beyond the reach
-of an adversary. Is it necessary to assume that such a trusted location exists,
-in order to defend against rollback attacks?
+\paragraph{Question 2: } What idf they never update their DH keys at all?
+Please explain the security consequences of this change with regards to
+Forward Secrecy and Break-in Recovery.
 
-Yes, having a trusted storage location beyond reach of an adversary is required
-in order to defend against rollback attacks. This is because rollback attacks
-reproduce legitimate domain names and passwords (i.e. signed with the right
-secret keys) and so key verification will not surface an attack.
-
-\paragraph{Question 4: } Explain how you would do the look up if you had to use
-a randomized MAC instead of HMAC. Is there a performance penalty involved, and if
-so, what?
-
-In the case of a randomized MAC, there may be many valid tags $t_1, t_2, ...$
-for a given message $m$. Assuming the randomized MAC is secure, it must still
-be difficult for an adversary to produce a new valid tag $t\prime$.
-
-For key-value store look up, we no are no longer able to recompute tag of the
-name and directly lookup key-value pair in O(1). Instead we will need to loop
-through all n elements in the key-value store dictionary, and for each run the
-randomized MAC verify function to query whether we are at the right key-value
-pair. This look up algorithm will cost O(n * [time to verify]).
+{\color{purple}Idea: .. }
 
 
-\paragraph{Question 5: } In our specification, we leak the number of records in
-the password manager. Describe an approach to reduce the information leaked
-about the number of records.
+\paragraph{Question 3: } Consider the following conversation between Alice 
+and Bob, protected via Double Ratchet Algorithm according to the spec:
 
-Instead of storing our key-value pairs in a "flat" dictionary, we could think
-about storing we could think about using a binary tree.
+\begin{verbatim}
+A: Hey Bob, can you send me the locker combo?
+A: I need to get my laptop
+B: Sure, it's 1234!
+A: Great, thanks! I used it and deleted the previous message.
+B: Did it work?
+\end{verbatim}
 
-\begin{itemize}
+What is the length of the longest sending chain used by Alice? By Bob? 
+Please explain.
 
-    \item Each node of the tree will contain pointers to its child nodes, until we reach
-        the leaf nodes which will contain nullptrs for child nodes and data packet with
-        key-value pairs of our key-value store.
+{\color{purple} Longest sending chain used by Alice is length 2. This is 
+occurs when Alice sends 2 messages without response from Bob. Since Bob 
+did not respond in between, Alice completes a second symmetric ratchet 
+to update the chain and message keys without needing to complete a DH 
+ratchet to update the root key. }
 
-    \item Since it is unlikely we have the exact number of key-value pairs as
-        leaves of a sufficiently large binary tree (would need to be a power of
-        2), we will then pad the remainder of the leaves with fake data of same
-        size as our real key-value pair data packets.
+{\color{purple} Longest sending chain used by Bob is length 1. This is 
+because Bob never sends more than one message in sequence without Alice
+responding. }
 
-    \item The height of a binary tree is ceil(log(n+1)) where n is the number of
-        nodes (= 2*leaves-1). We assume the adversary can see the size of the
-        tree and therefore know its height and number of leaves. However, they
-        will not know how many of leaves represent real vs fake key-value pairs.
+\paragraph{Question 4: } Unfortunately, in the situation above, Mallory 
+has been monitoring their communications and finally managed to compromise 
+Alice's phone and steal all her keys just before she sent her third message.
+Mallory will be unable to determine the locker combination. State and describe 
+the relevant security property and justify why double ratchet provides this
+property.
 
-    \item Finally, there could be anywhere from ceil(log(n)) (number of
-        leaves at previous level of tree) to ceil(log(n+1)) (number of leaves at
-        current level of tree) real key-value pairs. This range is equal to
-        floor(log(n)).
+{\color{purple} Forward Secrecy. This property states that compromising long
+term keys or current session key must not compromise past communications.
 
-\end{itemize}
+The double ratchet provides this property: output keys from the past appear 
+random to an adversary who learns the KDF key at some point in time. This 
+happens because each ratchet step uses a KDF which acts like a one-way 
+PRF (deterministic and output looks random) so long as we include 
+sufficient entropy. }
 
-\paragraph{Question 6: } What is a way we can add multi-user support for
-specific sites to our password manager system without compromising security for
-other sites that these users may wish to store passwords of? That is, if Alice
-and Bob wish to access one stored password (say for nytimes) that either of them
-can get and update, without allowing the other to access their passwords for
-other websites.
 
-We first use Diffie-Helman key exchange to generate a shared secret between
-Alice and Bob. We will call this the sharedMasterKey which Alice and Bob each
-then store separately in their own respective trusted locations.
+\paragraph{Question 5: } The method of government surveillance is deeply
+flawed. Why might it not be as effective as intended? 
 
-With our sharedMasterKey, both Alice and Bob can use this to encrypt and decrypt
-any shared sites (domain names, e.g. nytimes). This need not compromise security
-for other sites that both users wish to maintain single-user access to because
-they can just continue to use their respective existing master keys for these.
+{\color{purple} We interpreted this question to be about citizens' ability to 
+evade government eavesdropping. Idea: what is the user (citizen) simply did not 
+follow the protocol and used the wrong government public key. Without updates
+to the protocol, the government would likely not even know this had happened!}
+
+What are the major risks involved with this method?
+
+{\color{purple} The major risk we saw was around the government becoming a single 
+source of failure. For example, if the government was hacked, and their secret key was
+stolen, the attacker could access and read all communciations that use the messanging
+service. }
+
+
+\paragraph{Question 6: } The SubtleCrypto library is able to generate signatures
+in various ways, including both ECDSA and RSA keys. For both the ECDSA and RSA-based
+signature technqiues, please compare:
+
+\begin{enumerate}
+    \item Which keys take longer to generate (timing {\color{blue} SubtleCrypto.generateKey})?
+    {\color{pruple} ... }
+
+    \item Which signature takes longer to generate (timing {\color{blue} SubtleCrypto.sign})?
+    {\color{pruple} ... }
+
+    \item Which signature is longer in length (length of output of {\color{blue} SubtleCrypto.sign})?
+    {\color{pruple} ... }
+
+    \item Which signature takes longer to verify (timing {\color{blue} SubtleCrypto.verify})?
+    {\color{pruple} ... }
+
+\end{enumerate}
+
 
 \end{document}
 
