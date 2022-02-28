@@ -20,6 +20,9 @@ import {
 
 /********* Implementation ********/
 
+const infoStr = "ratchet-str"; // used for generating ratchet in HKDF
+const data = "const_str"; // used for generating message key and next chain key
+
 /** Stringify certificate for use in verification */
 const stringifyCert = function (cert) {
   if (typeof cert == "object") {
@@ -41,7 +44,7 @@ export default class MessengerClient {
     // Feel free to modify their structure as you see fit.
     this.caPublicKey = certAuthorityPublicKey;
     this.govPublicKey = govPublicKey;
-    this.me = {}; // stores secret and public keys for alice
+    // this.me = {}; // stores secret and public keys for alice
     this.conns = {}; // data for each active connection
     this.certs = {}; // certificates of other users
   };
@@ -59,7 +62,8 @@ export default class MessengerClient {
 
     // Generate and store ElGamal key pair
     let keypairObject = await generateEG();
-    this.me = keypairObject;
+    this.sec = keypairObject.sec;
+    this.pub = keypairObject.pub;
     
     // Construct and store certificate
     const certificate = {
@@ -68,6 +72,7 @@ export default class MessengerClient {
       "username": username,
       "pub": keypairObject.pub
     };
+    this.cert = certificate;
 
     return certificate;
   }
@@ -83,48 +88,79 @@ export default class MessengerClient {
    */
   async receiveCertificate(certificate, signature) {
 
-    // Generate HMAC of certificate
-    let tag = HMACtoHMACKey(this.caPublicKey, stringifyCert(certificate))
-
     // Verify certificate and add to repo
-    if (verifyWithECDSA(this.caPublicKey, tag, signature)) {
+    if (verifyWithECDSA(this.caPublicKey, stringifyCert(certificate), signature)) {
       this.certs[certificate.username] = certificate;
     } else {
 
       // Throw exception for potential tampering
-      throw ("Certificate signature cannot be verified");
+      throw ("Certificate is invalid");
     }
   }
 
   /** 
    * Helper function to initialize the sender 
-   * essentially performs Diffie-Helman ratchet
    *  
    * @pre Assume Alice and Bob both have generated 
    * certificates and that Alice has recewived Bob's
   */
-  async initSender(name) {
+  async initiateConn(certificate) {
 
     // Create shared secret to use as root key
-    let sharedSecret = await computeDH(this.me.sec, this.certs[name].pub);
-
-    // Generate Alice's Diffie-Helman pair for this connection
-    let keypairObject = await generateEG();
-
-    // Perform Diffie-Helman with Alice's private, Bob's public key 
-    let DHOutput = await computeDH(keypairObject.sec, this.certs[name].pub);
-
-    // Ratchet root chain by one step with sharedSecret (rk) as salt
-    let rootkey, chainkey = await HKDF(DHOutput, sharedSecret, "ratchet-str");
+    let sharedSecret = await computeDH(this.sec, certificate.pub);
 
     // Add Bob to list of active connections
-    this.conns[name] = { 
-      "pub": this.certs[name].pub,
-      "root": rootkey,    // replaces original root key (sharedSecret)
-      "chain": chainkey,  // to be replaced during symm ratchet
+    this.conns[certificate.username] = { 
+      "self_pub": this.pub,         // store current version of alice's eg keypair
+      "self_sec": this.sec,         // store current version of alice's eg keypair
+      "root": sharedSecret,    // replaces original root key (sharedSecret)
+      "conn_pub": certificate.pub,  // store bob's public key
+      // "chain": chainkey,  // to be replaced during symm ratchet
       // "msgkey": "",    // generated in symm ratchet, no need to store
     }
 
+  }
+
+  /** 
+   * Helper function to perform DH ratchet 
+   * Implements HKDF as KDF function
+   * */
+  async ratchetRootChain(name, sendMessage=false) {
+
+    // Create DH output to use as input key for root chain
+    let dh_out = await computeDH(this.conns[name].self_sec, this.conns[name].conn_pub);
+
+    // Execute HKDF to update root key and generate new chain key
+    let [rootKey, chainKey] = await HKDF(dh_out, this.conns[name].root, infoStr);
+
+    // Update connection information
+    this.conns[name].root = rootKey;
+
+    if (sendMessage) {
+      this.conns[name].chain_send = await HMACtoHMACKey(chainKey, data);
+    } 
+    else {
+      this.conns[name].chain_rec = await HMACtoHMACKey(chainKey, data);
+    }
+    
+  }
+
+  /** 
+   * Helper function to support symmetric ratchet 
+   * Implements HMAC as KDF function
+  */
+  async ratchetSymmChain(name, sendMessage=false) {
+    
+    if (sendMessage) {
+      let prevChainKey = this.conns[name].chain_send;
+      this.conns[name].chain_send = await HMACtoHMACKey(prevChainKey, data);
+      this.conns[name].msgkey = await HMACtoAESKey(prevChainKey, data, false);
+      this.conns[name].msgkey_arr = await HMACtoAESKey(prevChainKey, data, true);
+    } 
+    else {
+      let prevChainKey = this.conns[name].chain_rec;
+      this.conns[name].chain_rec = await HMACtoHMACKey(prevChainKey, data);
+    }
   }
 
   /**
@@ -138,37 +174,50 @@ export default class MessengerClient {
    */
   async sendMessage(name, plaintext) {
 
-    // Check if name initialized
+    // Check if bob (name) initialized
     if (!(name in this.conns)) {
-      console.log("running init sender sub-routine");
-      await this.initSender(name);
+      await this.initiateConn(this.certs[name]);
     }
 
-    // Symmetric key ratchet
-    let chainkey = await HMACtoHMACKey(this.conns[name].chain, "0");
-    let msgkey = await HMACtoAESKey(this.conns[name].chain, "1", false)
+    // Check if we have sent a message to bob (name) before
+    if (!this.conns[name].chain_send) {
+      await this.ratchetRootChain(name, true);
+    }
+    
+    // Symmetric ratchet to increment chain and msg keys
+    await this.ratchetSymmChain(name, true);
+    let ivMsg = genRandomSalt();
 
-    // Update bob's connection info
-    this.conns[name].chain = chainkey;
+    // Government surveillance
+    let keypairObject = await generateEG();
+    let vGov = keypairObject.pub;
+    let dh_out = await computeDH(keypairObject.sec, this.govPublicKey);
+    let govKey = await HMACtoAESKey(dh_out, "AES-gen");
+    let ivGov = genRandomSalt();
 
-    // Symmetric encryption of plaintext
-    let iv = genRandomSalt();
-    const ciphertext = await encryptWithGCM(msgkey, plaintext, iv);
-
-    // Prepare header with everything needed for bob to decrypt and ratchet
-    const header = {
-      "iv": iv,
-      "username": name,
-      "pub": this.conns[name].pub,
+   // Prepare header with everything needed for bob to decrypt and ratchet
+   let header = {
+    "ivMsg": ivMsg,
+    "username": this.cert.username,
+    "sender_pub": this.conns[name].self_pub,
+    "vGov": vGov,
+    "cGov": {},  // Need to stringify header for generating cGov
+    "ivGov": ivGov,
     };
 
-    return [header, JSON.stringify(ciphertext)];
-  }
+    // Symmetric encryption of plaintext
+    const ciphertext = await encryptWithGCM(
+      this.conns[name].msgkey, 
+      plaintext, 
+      ivMsg, 
+      JSON.stringify(header)
+    );
+    
+    // Update header with cGov
+    const cGov = await encryptWithGCM(govKey, this.conns[name].msgkey_arr, ivGov);
+    header.cGov = cGov;
 
-  /** Helper function to initialize the receiver */
-  async initReceiver() {
-    // do something ...
-    return;
+    return [header, ciphertext];
   }
 
   /**
@@ -184,16 +233,27 @@ export default class MessengerClient {
 
     // Check if name initialized
     if (!(name in this.conns)) {
-      console.log("running init receiver sub-routine");
-      this.initReceiver(name);
+      this.initiateConn(this.certs[name]);
     }
 
-    // Check if Bob's public key has changed
-    if (header.pub != this.conns[name].pub) {
-      // do something ...
+    // Check if received msg from this sender before
+    // or, if public key of sender has been updated
+    if (!this.conns[name].chain_rec || 
+        header.sender_pub !== this.conns[name].conn_pub) {
+      await this.ratchetRootChain(name, false);
+    }
+    else {
+      await this.ratchetSymmChain(name, false);
     }
 
-    throw ("not implemented!");
-    return plaintext;
+    // Decrypt ciphertext
+    let plaintext = await decryptWithGCM(
+      this.conns[name].msgkey, 
+      ciphertext, 
+      header.ivMsg, 
+      JSON.stringify(header)
+    );
+
+    return byteArrayToString(plaintext);
   }
 };

@@ -164,10 +164,32 @@ export async function generateECDSA() {
   return keypairObject;  
 }
 
+export async function generateRSA() {
+  // returns a pair of Digital Signature Algorithm keys as an object
+  // private key is keypairObject.sec
+  // public key is keypairObject.pub
+  let keypair = await subtle.generateKey({ 
+    name: "RSA-OAEP",
+    modulusLength: 4096,
+    publicExponent: new Uint8Array([1, 0, 1]), 
+    hash: "SHA-256",
+  }, true, ["sign", "verify"]);
+  const keypairObject = { pub: keypair.publicKey, sec: keypair.privateKey }
+  return keypairObject;  
+}
+
 export async function signWithECDSA(privateKey, message) {
   // returns signature of message with privateKey
   // privateKey should be pair.sec from generateECDSA
   // message is a string
   // signature returned as an ArrayBuffer
   return await subtle.sign({ name: "ECDSA", hash: { name: "SHA-384" },}, privateKey, message);
+}
+
+export async function signWithRSA(privateKey, message) {
+  // returns signature of message with privateKey
+  // privateKey should be pair.sec from generateECDSA
+  // message is a string
+  // signature returned as an ArrayBuffer
+  return await subtle.sign("RSASSA-PKCS1-v1_5", privateKey, message);
 }

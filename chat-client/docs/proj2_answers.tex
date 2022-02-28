@@ -13,14 +13,42 @@ Diffie-Hellman ratchets every time they exchange messages. Could the protocol
 be modified to have them increment the DH ratchets once every ten messages 
 without compromising confidentiality against an eavesdropper?
 
-{\color{purple}Idea: .. }
+{\color{purple} Semantic security here means that an adversary eavesdropping
+cannot distinguish between random and ciphertext produced by our algorithm. 
+Whether this property is provided by our implementation depends on the security 
+properties Galois Counter Mode which is our underlying encryption algorithm.
+
+Since GCM is semantically secure, we can argue that our algorithm is also 
+semantically secure. Moreover, if we reduce the frequency of DH Ratchet steps,
+our algorithm will remain semantically secure since we are still performing the
+symmetric ratchet which provides GCM with new message keys each time.
+
+However, by reducing the frequency of our DH ratchets, we do compromise Forward
+Secrecy since an attacker that steals our root key will be able to decrypt upto
+the last 10 messages. }
 
 
-\paragraph{Question 2: } What idf they never update their DH keys at all?
+\paragraph{Question 2: } What if they never update their DH keys at all?
 Please explain the security consequences of this change with regards to
 Forward Secrecy and Break-in Recovery.
 
-{\color{purple}Idea: .. }
+{\color{purple} 
+\textbf{Forward Secrecy: } refers to an attacker not being 
+able to read past messages given knowledge of the current root and chain keys. 
+If we do not perform the DH ratchet, the attacker would be able to read all 
+past communications if they possess the root key output from the last DH 
+ratchet step!
+
+However, if the attacker only is able to steal a chain key, then our algorithm 
+will still provide Forward Secrecy since we update these for every message sent 
+via our one-way HMAC function (Symmetric Chain KDF).
+
+\textbf{Break-in Recovery: } refers to our users being able to recover from 
+an attack where the adversary steals one party's key. Since inputs for the 
+sending and receiving chains are constant, the symmetric ratchet itself does 
+not provide break-in recovery. If we do not update the DH keys at all, then 
+we cannot recover from an attack and therefore would not provide Break-in 
+Recovery. }
 
 
 \paragraph{Question 3: } Consider the following conversation between Alice 
@@ -45,7 +73,8 @@ ratchet to update the root key. }
 
 {\color{purple} Longest sending chain used by Bob is length 1. This is 
 because Bob never sends more than one message in sequence without Alice
-responding. }
+responding. Therefore, Bob needs to perform a DH ratchet and creates and new 
+sending chain every time he sends a message. }
 
 \paragraph{Question 4: } Unfortunately, in the situation above, Mallory 
 has been monitoring their communications and finally managed to compromise 
@@ -70,7 +99,8 @@ flawed. Why might it not be as effective as intended?
 {\color{purple} We interpreted this question to be about citizens' ability to 
 evade government eavesdropping. Idea: what is the user (citizen) simply did not 
 follow the protocol and used the wrong government public key. Without updates
-to the protocol, the government would likely not even know this had happened!}
+to the protocol, the government would likely not even know this had happened
+unless it tried to decrypt every message!}
 
 What are the major risks involved with this method?
 
@@ -86,16 +116,17 @@ signature technqiues, please compare:
 
 \begin{enumerate}
     \item Which keys take longer to generate (timing {\color{blue} SubtleCrypto.generateKey})?
-    {\color{pruple} ... }
+    {\color{purple} RSA-based techniques (eg. RSA-PSS) are much slower
+    for generating keys: 300ms vs 2ms }
 
-    \item Which signature takes longer to generate (timing {\color{blue} SubtleCrypto.sign})?
-    {\color{pruple} ... }
+    \item Which signature takes longer to generate (timing {\color{blue} SubtleCrypto.sign})? 
+    {\color{purple} RSA-based signatures take longer to generate: 5ms vs 1ms }
 
     \item Which signature is longer in length (length of output of {\color{blue} SubtleCrypto.sign})?
-    {\color{pruple} ... }
+    {\color{purple} RSA signature byte length is longer: 512 vs 96 bytes}
 
     \item Which signature takes longer to verify (timing {\color{blue} SubtleCrypto.verify})?
-    {\color{pruple} ... }
+    {\color{purple} ECDSA takes longer to verify: 0.26ms vs 0.74ms}
 
 \end{enumerate}
 
