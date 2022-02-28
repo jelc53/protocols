@@ -141,7 +141,7 @@ export default class MessengerClient {
     // Check if name initialized
     if (!(name in this.conns)) {
       console.log("running init sender sub-routine");
-      this.initSender(name);
+      await this.initSender(name);
     }
 
     // Symmetric key ratchet
