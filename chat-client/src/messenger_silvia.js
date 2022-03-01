@@ -180,7 +180,7 @@ export default class MessengerClient {
    * Return Type: string
    */
   async receiveMessage(name, [header, ciphertext]) {
-    if (!(name in this.conns)) {
+    if (!(name in this.conns)) { 
       await this.initiate_conn(this.certs[name]);
     }
 

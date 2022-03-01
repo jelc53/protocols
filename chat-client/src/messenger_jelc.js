@@ -128,16 +128,16 @@ export default class MessengerClient {
   async ratchetRootChain(name, sendMessage=false) {
 
     // Create DH output to use as input key for root chain
-    let self_keypair = await generateEG();
-    let dh_out = await computeDH(self_keypair.sec, this.conns[name].conn_pub);
+    keypair = await generateEG();
+    this.self_sec = keypair.sec;
+    this.self_pub = keypair.pub;
+    let dh_out = await computeDH(keypair.sec, this.conns[name].conn_pub);
 
     // Execute HKDF to update root key and generate new chain key
     let [rootKey, chainKey] = await HKDF(dh_out, this.conns[name].root, infoStr);
 
     // Update connection information
     this.conns[name].root = rootKey;
-    this.conns[name].self_sec = self_keypair.sec;
-    this.conns[name].self_pub = self_keypair.pub;
 
     if (sendMessage) {
       this.conns[name].chain_send = await HMACtoHMACKey(chainKey, data);
