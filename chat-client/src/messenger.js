@@ -115,7 +115,8 @@ export default class MessengerClient {
       "self_sec": this.self_sec,         // store current version of alice's eg keypair
       "root": sharedSecret,    // replaces original root key (sharedSecret)
       "conn_pub": certificate.pub,  // store bob's public key
-      // "chain": chainkey,  // to be replaced during symm ratchet
+      // "chain_rec": {},  // to be replaced during symm ratchet
+      // "chain_send": {}, // to be replaced during symm ratchet
       // "msgkey": "",    // generated in symm ratchet, no need to store
     }
 
@@ -141,8 +142,7 @@ export default class MessengerClient {
 
     if (sendMessage) {
       this.conns[name].chain_send = await HMACtoHMACKey(chainKey, data);
-    } 
-    else {
+    } else {
       this.conns[name].chain_rec = await HMACtoHMACKey(chainKey, data);
     }
     
